@@ -1,0 +1,305 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#define TAILLE 3
+
+typedef struct {
+    char matrice[TAILLE][TAILLE];
+} etat;
+
+typedef struct Noeud {
+    struct Noeud* suivant;
+    etat Etat;
+    int g; // Coût depuis l'état initial jusqu'à ce noeud
+    int h;
+} noeud;
+
+typedef struct {
+    noeud* debut;
+    noeud* fin;
+} liste;
+
+liste listeNoeuds;
+liste NoeudsDejaTraites;
+etat etatInitial;
+etat etatFinal;
+
+void initialiserListe(liste* l) {
+    l->debut = l->fin = NULL;
+}
+
+void initialiserEtat(etat* e, const char data[TAILLE][TAILLE]) {
+    for (int i = 0; i < TAILLE; i++) {
+        for (int j = 0; j < TAILLE; j++) {
+            e->matrice[i][j] = data[i][j];
+        }
+    }
+}
+
+void inserer(etat etatCourant, liste* l) {
+    noeud* nouveauNoeud = (noeud*)malloc(sizeof(noeud));
+    if (!nouveauNoeud) {
+        printf("Erreur d'allocation mémoire.\n");
+        exit(1);
+    }
+    nouveauNoeud->Etat = etatCourant;
+    nouveauNoeud->suivant = NULL;
+
+    if (l->fin == NULL) {
+        l->debut = l->fin = nouveauNoeud;
+    } else {
+        l->fin->suivant = nouveauNoeud;
+        l->fin = nouveauNoeud;
+    }
+    //afficherEtat(l->debut->Etat);
+}
+etat extraire(liste* l) {
+    if (l->debut == NULL) {
+        printf("Liste vide, impossible d'extraire.\n");
+        exit(1);
+    }
+
+    noeud* temp = l->debut;
+    etat etatCourant = temp->Etat;
+    l->debut = l->debut->suivant;
+    if (l->debut == NULL) {
+        l->fin = NULL;
+    }
+    free(temp);
+    return etatCourant;
+}
+
+void swap(char *a, char *b) {
+    char temp = *a;
+    *a = *b;
+    *b = temp;
+}
+
+void genereSuccesseurs(etat et, liste* listeNoeuds) {
+    int videX = -1, videY = -1;
+    etat e;
+
+    // Trouver la position de la case vide
+    for (int i = 0; i < TAILLE; i++) {
+        for (int j = 0; j < TAILLE; j++) {
+            if (et.matrice[i][j] == ' ') {
+                videX = i;
+                videY = j;
+                break;
+            }
+        }
+        if (videX != -1) break;
+    }
+
+    // Générer les successeurs
+    // R1: Déplacer la case vide à droite
+    if (videY + 1 < TAILLE) {
+        e = et;
+        swap(&e.matrice[videX][videY], &e.matrice[videX][videY + 1]);
+        inserer(e, listeNoeuds);
+        afficherEtat(e);
+    }
+
+    // R2: Déplacer la case vide à gauche
+    if (videY - 1 >= 0) {
+        e = et;
+        swap(&e.matrice[videX][videY], &e.matrice[videX][videY - 1]);
+        inserer(e, listeNoeuds);
+        afficherEtat(e);
+
+    }
+
+    // R3: Déplacer la case vide vers le haut
+    if (videX - 1 >= 0) {
+        e = et;
+        swap(&e.matrice[videX][videY], &e.matrice[videX - 1][videY]);
+        inserer(e, listeNoeuds);
+        afficherEtat(e);
+    }
+
+    // R4: Déplacer la case vide vers le bas
+    if (videX + 1 < TAILLE) {
+        e = et;
+        swap(&e.matrice[videX][videY], &e.matrice[videX + 1][videY]);
+        inserer(e, listeNoeuds);
+        afficherEtat(e);
+    }
+}
+
+int appartient(etat e, liste l) {
+    noeud* temp = l.debut;
+    while (temp != NULL) {
+        if (memcmp(temp->Etat.matrice, e.matrice, sizeof(e.matrice)) == 0) {
+            return 1; // L'état existe dans la liste
+        }
+        temp = temp->suivant;
+    }
+    return 0;
+}
+
+int g(noeud* n) {
+    int cost = 0;
+    while (n != NULL) {
+        cost++;
+        n = n->suivant;
+    }
+    return cost;
+}
+
+int h(etat et) {
+    int cout = 0;
+    for (int i = 0; i < TAILLE; i++) {
+        for (int j = 0; j < TAILLE; j++) {
+            if (et.matrice[i][j] != etatFinal.matrice[i][j] && et.matrice[i][j] != ' ') {
+                cout++;
+            }
+        }
+    }
+    return cout;
+}
+void afficherEtat(etat e) {
+    for (int i = 0; i < TAILLE; i++) {
+        for (int j = 0; j < TAILLE; j++) {
+            printf("%c ", e.matrice[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+int etatSolution(etat etatCourant, etat etatFinal) {
+    for (int i = 0; i < TAILLE; i++) {
+        for (int j = 0; j < TAILLE; j++) {
+            if (etatCourant.matrice[i][j] != etatFinal.matrice[i][j]) {
+                return 0; // Les états sont différents
+            }
+        }
+    }
+    return 1; // Les états sont identiques
+}
+noeud* rechercher(etat et, liste l) {
+    noeud* temp = l.debut; // Initialisation du pointeur temporaire au début de la liste
+
+    // Parcours de la liste
+    while (temp != NULL) {
+        // Comparaison de l'état du noeud avec l'état recherché
+        if (memcmp(temp->Etat.matrice, et.matrice, sizeof(et.matrice)) == 0) {
+            return temp; // Retourne le noeud si l'état est trouvé
+        }
+        temp = temp->suivant; // Passage au noeud suivant dans la liste
+    }
+
+    return NULL; // Retourne NULL si l'état n'est pas trouvé dans la liste
+}
+void supprimer(noeud* temp, liste* listeNoeuds) {
+    // Vérifier si le nœud à supprimer est le premier de la liste
+    if (listeNoeuds->debut == temp) {
+        listeNoeuds->debut = temp->suivant; // Mettre à jour le début de la liste
+        free(temp); // Libérer la mémoire allouée pour le nœud à supprimer
+        return;
+    }
+
+    // Parcourir la liste jusqu'à trouver le nœud précédent au nœud à supprimer
+    noeud* prev = listeNoeuds->debut;
+    while (prev->suivant != NULL && prev->suivant != temp) {
+        prev = prev->suivant;
+    }
+
+    // Mettre à jour les pointeurs pour contourner le nœud à supprimer
+    prev->suivant = temp->suivant;
+    // Libérer la mémoire allouée pour le nœud à supprimer
+    free(temp);
+}
+void trier(liste* listeNoeuds) {
+    if (listeNoeuds->debut == NULL || listeNoeuds->debut->suivant == NULL) {
+
+        return;
+    }
+
+    noeud* current = listeNoeuds->debut->suivant;
+    while (current != NULL) {
+        noeud* temp = current;
+        while (temp != listeNoeuds->debut && temp->g < temp->suivant->g) {
+            // Échanger les nœuds si nécessaire pour les trier dans l'ordre croissant de g
+            int temp_g = temp->g;
+            temp->g = temp->suivant->g;
+            temp->suivant->g = temp_g;
+            temp = temp->suivant;
+        }
+        current = current->suivant;
+    }
+}
+void afficheretat(etat et){
+
+    printf(" [%i]--     [%i]--[%i] \n",et.matrice[0][0],et.matrice[0][1],et.matrice[0][2]);
+    printf(" [%i]--[%i]--[%i] \n",et.matrice[1][0],et.matrice[1][1],et.matrice[1][2]);
+    printf(" [%i]--[%i]--[%i]",et.matrice[2][0],et.matrice[2][1],et.matrice[2][2]);
+
+}
+void RechercheAetoile(etat etatInitial, etat etatFinal) {
+    initialiserListe(&listeNoeuds);
+    inserer(etatInitial, &listeNoeuds);
+    NoeudsDejaTraites.debut = NULL;
+    NoeudsDejaTraites.fin = NULL;
+
+    while (listeNoeuds.debut != NULL) {
+        etat etatCourant = extraire(&listeNoeuds);
+        liste listeSuccesseurs;
+        initialiserListe(&listeSuccesseurs);
+
+        if (etatSolution(etatCourant, etatFinal) == 1) {
+            printf("Succès ! Arrêt sur l’état :\n");
+            afficherEtat(etatCourant); // Supposer que cette fonction est correctement implémentée
+            return;
+        } else {
+            genereSuccesseurs(etatCourant, &listeSuccesseurs);
+            //afficherEtat(etatCourant);
+            //liste temp = listeSuccesseurs; // Copie de la liste de successeurs
+            //noeud* current = temp.debut; // Pointeur vers le début de la liste temporaire
+
+            //while (current != NULL) {
+            //afficherEtat(current->Etat); // Afficher l'état du noeud courant
+            //current = current->suivant; // Passer au noeud suivant
+            //}
+
+            noeud* n = listeSuccesseurs.debut;
+            while (n != NULL) {
+                n->g = g(n) + 1; // calculer g(n)
+                n->h = h(n->Etat); // calculer h(n)
+                int f_n = n->g + n->h; // calculer f(n)
+                if (!appartient(n->Etat, listeNoeuds) && !appartient(n->Etat, NoeudsDejaTraites)) {
+                    inserer(n->Etat, &listeNoeuds);
+                } else if (appartient(n->Etat, listeNoeuds)) {
+                    noeud* temp = rechercher(n->Etat, listeNoeuds);
+                    if (f_n < temp->g + temp->h) {
+                        temp->Etat = n->Etat;
+                    }
+                } else if (appartient(n->Etat, NoeudsDejaTraites)) {
+                    noeud* temp = rechercher(n->Etat, NoeudsDejaTraites);
+                    if (f_n < temp->g + temp->h) {
+                        supprimer(temp, &NoeudsDejaTraites);
+                        inserer(n->Etat, &listeNoeuds);
+                    }
+                }
+                n = n->suivant;
+            }
+            inserer(etatCourant, &NoeudsDejaTraites);
+            //trier(&listeNoeuds);
+        }
+    }
+    printf("Pas de solution.\n");
+}
+
+int main() {
+    const char init[TAILLE][TAILLE] = {{'2', '8', '3'}, {'1', '6', '4'}, {'7', ' ', '5'}};
+    const char fin[TAILLE][TAILLE] = {{'1', '2', '3'}, {'8', ' ', '4'}, {'7', '6', '5'}};
+
+
+
+    initialiserEtat(&etatInitial, init);
+    initialiserEtat(&etatFinal, fin);
+
+    RechercheAetoile(etatInitial, etatFinal); // Appel de la fonction RechercheAetoile
+
+    return 0;
+}
